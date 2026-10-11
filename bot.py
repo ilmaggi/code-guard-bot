@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 import re
+import asyncio  # Necessario per il timer
 
 # --- CONFIGURAZIONE ---
 # Inserisci qui l'ID del canale #codici
@@ -10,7 +11,13 @@ CANALE_CODICI_ID = 1558837797690015911
 # Inserisci qui l'ID del canale #clip
 CANALE_CLIP_ID = 1558121727949672532 
 
+# Inserisci qui l'ID del canale vocale AFK
+CANALE_AFK_ID = 1558879456066674819  # <--- SOSTITUISCI CON L'ID REALE DEL CANALE AFK
+
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Dizionario per tenere traccia dei timer attivi
+timer_mute = {}
 
 # --- LOGICA PER #CODICI ---
 def is_probabilmente_codice(contenuto):
@@ -26,32 +33,26 @@ def is_probabilmente_codice(contenuto):
 
 # --- LOGICA PER #CLIP ---
 def is_media_link(message):
-    # 1. Controlla se ci sono allegati (file caricati direttamente)
     if message.attachments:
         for att in message.attachments:
             if att.content_type and att.content_type.startswith(('image/', 'video/')):
                 return True
 
-    # 2. Controlla se ci sono link nel testo
     urls = re.findall(r'(https?://[^\s]+)', message.content)
     if not urls:
         return False
 
-    # Domini comuni di video/immagini
     media_domains = [
         'youtube.com', 'youtu.be', 'twitch.tv', 'tiktok.com', 'instagram.com', 
         'imgur.com', 'giphy.com', 'streamable.com', 'twitter.com', 'x.com',
         'tenor.com', 'reddit.com', 'vimeo.com', 'dailymotion.com'
     ]
     
-    # Estensioni di file multimediali
     media_exts = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.webm', '.avi', '.mkv')
 
     for url in urls:
-        # Controlla il dominio
         if any(domain in url.lower() for domain in media_domains):
             return True
-        # Controlla l'estensione del file (rimuovendo eventuali parametri GET)
         url_pulito = url.lower().split('?')[0]
         if url_pulito.endswith(media_exts):
             return True
@@ -61,12 +62,47 @@ def is_media_link(message):
 # --- CONFIGURAZIONE DEL BOT ---
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True  # NECESSARIO per rilevare i cambiamenti vocali
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
     print(f"Bot connesso come {bot.user}")
+
+# --- LOGICA DI GESTIONE VOCALE (AFK) ---
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # 1. Controlla se l'utente è stato mutato (da server o da solo)
+    if after.mute or after.self_mute:
+        if member.id not in timer_mute:
+            print(f"Timer avviato per {member.name} (mutato)")
+            
+            async def sposta_dopo_timeout():
+                # Attende 1 minuto (60 secondi) - MODIFICATO PER IL TEST
+                await asyncio.sleep(60) 
+                
+                # Ricontrolla lo stato: se è ancora mutato e in un canale vocale, spostalo
+                if member.voice and (member.voice.mute or member.voice.self_mute):
+                    afk_channel = member.guild.get_channel(CANALE_AFK_ID)
+                    if afk_channel and member.voice.channel.id != CANALE_AFK_ID:
+                        try:
+                            await member.move_to(afk_channel, reason="Auto-move: utente mutato da oltre 1 minuto")
+                            print(f"Utente {member.name} spostato in AFK.")
+                        except discord.Forbidden:
+                            print(f"ERRORE: Permessi insufficienti per spostare {member.name}.")
+                
+                # Rimuovi il timer dal dizionario
+                timer_mute.pop(member.id, None)
+
+            asyncio.create_task(sposta_dopo_timeout())
+            timer_mute[member.id] = True
+
+    # 2. Se l'utente NON è più mutato, annulla il timer
+    else:
+        if member.id in timer_mute:
+            print(f"Timer annullato per {member.name} (smutato)")
+            timer_mute.pop(member.id, None)
 
 @bot.event
 async def on_message(message):
