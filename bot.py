@@ -1,55 +1,66 @@
 import discord
 from discord.ext import commands
 import os
+import re
 
 # --- CONFIGURAZIONE ---
-# Sostituisci con l'ID del tuo canale #codici
-CANALE_CODICI_ID = 1558837797690015911
+# Inserisci qui l'ID del canale #codici
+CANALE_CODICI_ID = 123456789012345678 
 
-# Il token del tuo bot (verrà letto da una variabile d'ambiente per sicurezza)
+# Inserisci qui l'ID del canale #clip
+CANALE_CLIP_ID = 1558121727949672532 
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-# --- LOGICA DI RILEVAMENTO ---
+# --- LOGICA PER #CODICI ---
 def is_probabilmente_codice(contenuto):
-    """
-    Analizza il messaggio e restituisce True se sembra codice, False se sembra chiacchiera.
-    """
-    # 1. Blocchi di codice Discord (```)
-    if contenuto.startswith("```") and contenuto.endswith("```"):
-        return True
-    if "`" in contenuto:  # Codice inline
-        return True
-
-    # 2. Parole chiave comuni di vari linguaggi
-    keywords = [
-        "def ", "class ", "import ", "from ", "function ", "const ", "let ", "var ",
-        "if ", "else ", "for ", "while ", "return ", "print(", "console.log",
-        "public ", "static ", "void ", "int ", "float ", "string ", "bool ",
-        "<html>", "<div>", "<?php", "SELECT ", "FROM ", "WHERE ", "async ", "await "
-    ]
-    contenuto_lower = contenuto.lower()
-    if any(kw in contenuto_lower for kw in keywords):
-        return True
-
-    # 3. Simboli e operatori tipici del codice
+    if contenuto.startswith("```") and contenuto.endswith("```"): return True
+    if "`" in contenuto: return True
+    keywords = ["def ", "class ", "import ", "from ", "function ", "const ", "let ", "var ", "if ", "else ", "for ", "while ", "return ", "print(", "console.log", "public ", "static ", "void ", "int ", "float ", "string ", "bool ", "<html>", "<div>", "<?php", "SELECT ", "FROM ", "WHERE ", "async ", "await "]
+    if any(kw in contenuto.lower() for kw in keywords): return True
     simboli = ["{", "}", "(", ")", "[", "]", ";", "==", "=>", "+=", "-=", "*/", "//", "&&", "||"]
-    conteggio_simboli = sum(contenuto.count(s) for s in simboli)
-    if conteggio_simboli >= 3: # Se ci sono almeno 3 simboli, è probabile che sia codice
-        return True
-
-    # 4. Indentazione (spazi o tab all'inizio di una riga)
+    if sum(contenuto.count(s) for s in simboli) >= 3: return True
     righe = contenuto.split("\n")
-    if len(righe) > 1:
-        for riga in righe:
-            if riga.startswith("    ") or riga.startswith("\t"):
+    if len(righe) > 1 and any(r.startswith("    ") or r.startswith("\t") for r in righe): return True
+    return False
+
+# --- LOGICA PER #CLIP ---
+def is_media_link(message):
+    # 1. Controlla se ci sono allegati (file caricati direttamente)
+    if message.attachments:
+        for att in message.attachments:
+            if att.content_type and att.content_type.startswith(('image/', 'video/')):
                 return True
 
-    # 5. Se nessun indizio è stato trovato, consideralo chiacchiera
+    # 2. Controlla se ci sono link nel testo
+    urls = re.findall(r'(https?://[^\s]+)', message.content)
+    if not urls:
+        return False
+
+    # Domini comuni di video/immagini
+    media_domains = [
+        'youtube.com', 'youtu.be', 'twitch.tv', 'tiktok.com', 'instagram.com', 
+        'imgur.com', 'giphy.com', 'streamable.com', 'twitter.com', 'x.com',
+        'tenor.com', 'reddit.com', 'vimeo.com', 'dailymotion.com'
+    ]
+    
+    # Estensioni di file multimediali
+    media_exts = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.webm', '.avi', '.mkv')
+
+    for url in urls:
+        # Controlla il dominio
+        if any(domain in url.lower() for domain in media_domains):
+            return True
+        # Controlla l'estensione del file (rimuovendo eventuali parametri GET)
+        url_pulito = url.lower().split('?')[0]
+        if url_pulito.endswith(media_exts):
+            return True
+
     return False
 
 # --- CONFIGURAZIONE DEL BOT ---
 intents = discord.Intents.default()
-intents.message_content = True  # Necessario per leggere il contenuto dei messaggi
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -59,30 +70,29 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # Ignora i messaggi del bot stesso
     if message.author == bot.user:
         return
 
-    # Controlla solo i messaggi nel canale #codici
+    # Logica per il canale #codici
     if message.channel.id == CANALE_CODICI_ID:
         if not is_probabilmente_codice(message.content):
-            # Cancella il messaggio
             await message.delete()
-            
-            # Avvisa l'utente in privato
             try:
-                await message.author.send(
-                    f"⚠️ Il tuo messaggio in <#{CANALE_CODICI_ID}> è stato eliminato perché non sembra essere codice. "
-                    "Questo canale è riservato esclusivamente alla programmazione."
-                )
+                await message.author.send(f"⚠️ Il tuo messaggio in <#{CANALE_CODICI_ID}> è stato eliminato perché non sembra essere codice.")
             except discord.Forbidden:
-                # L'utente ha i DM disabilitati, non possiamo fare nulla
                 pass
 
-    # Assicurati che gli altri comandi del bot funzionino ancora
+    # Logica per il canale #clip
+    if message.channel.id == CANALE_CLIP_ID:
+        if not is_media_link(message):
+            await message.delete()
+            try:
+                await message.author.send(f"⚠️ Il tuo messaggio in <#{CANALE_CLIP_ID}> è stato eliminato perché non contiene un video o un'immagine valida.")
+            except discord.Forbidden:
+                pass
+
     await bot.process_commands(message)
 
-# Avvia il bot
 if __name__ == "__main__":
     if TOKEN:
         bot.run(TOKEN)
