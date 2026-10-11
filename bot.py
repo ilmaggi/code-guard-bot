@@ -12,7 +12,7 @@ CANALE_CODICI_ID = 1558837797690015911
 CANALE_CLIP_ID = 1558121727949672532 
 
 # Inserisci qui l'ID del canale vocale AFK
-CANALE_AFK_ID = 1558879456066674819  # <--- SOSTITUISCI CON L'ID REALE DEL CANALE AFK
+CANALE_AFK_ID = 1558879456066674819 
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -79,15 +79,15 @@ async def on_voice_state_update(member, before, after):
             print(f"Timer avviato per {member.name} (mutato)")
             
             async def sposta_dopo_timeout():
-                # Attende 1 minuto (60 secondi) - MODIFICATO PER IL TEST
-                await asyncio.sleep(60) 
+                # Attende 5 minuti (300 secondi)
+                await asyncio.sleep(300) 
                 
                 # Ricontrolla lo stato: se è ancora mutato e in un canale vocale, spostalo
                 if member.voice and (member.voice.mute or member.voice.self_mute):
                     afk_channel = member.guild.get_channel(CANALE_AFK_ID)
                     if afk_channel and member.voice.channel.id != CANALE_AFK_ID:
                         try:
-                            await member.move_to(afk_channel, reason="Auto-move: utente mutato da oltre 1 minuto")
+                            await member.move_to(afk_channel, reason="Auto-move: utente mutato da oltre 5 minuti")
                             print(f"Utente {member.name} spostato in AFK.")
                         except discord.Forbidden:
                             print(f"ERRORE: Permessi insufficienti per spostare {member.name}.")
