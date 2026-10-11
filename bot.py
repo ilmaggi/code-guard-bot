@@ -5,7 +5,7 @@ import re
 
 # --- CONFIGURAZIONE ---
 # Inserisci qui l'ID del canale #codici
-CANALE_CODICI_ID = 123456789012345678 
+CANALE_CODICI_ID = 1558837797690015911 
 
 # Inserisci qui l'ID del canale #clip
 CANALE_CLIP_ID = 1558121727949672532 
