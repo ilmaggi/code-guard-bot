@@ -12,8 +12,8 @@ CANALE_AFK_ID = 1558879456066674819
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Dizionari per tenere traccia dei timer attivi
-timer_mute = {}
-afk_timer = {}  # <--- NUOVO: tiene traccia degli utenti nel canale AFK
+timer_deaf = {}  # Rinominato da timer_mute per chiarezza
+afk_timer = {}  
 
 # --- LOGICA PER #CODICI ---
 def is_probabilmente_codice(contenuto):
@@ -66,47 +66,48 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"Bot connesso come {bot.user}")
 
-# --- LOGICA DI GESTIONE VOCALE (MUTO + AFK) ---
+# --- LOGICA DI GESTIONE VOCALE (ASSORDATO + AFK) ---
 @bot.event
 async def on_voice_state_update(member, before, after):
     
-    # --- PARTE 1: Logica per il MUTO (sposta in AFK dopo 5 minuti) ---
-    if after.mute or after.self_mute:
-        if member.id not in timer_mute:
-            print(f"Timer muto avviato per {member.name}")
+    # --- PARTE 1: Logica per l'ASSORDATO (sposta in AFK dopo 10 minuti) ---
+    if after.deaf or after.self_deaf:
+        if member.id not in timer_deaf:
+            print(f"Timer assordato avviato per {member.name}")
             
             async def sposta_dopo_timeout():
-                await asyncio.sleep(300) # 5 minuti
-                if member.voice and (member.voice.mute or member.voice.self_mute):
+                await asyncio.sleep(600) # 10 minuti
+                # Ricontrolla se è ancora assordato
+                if member.voice and (member.voice.deaf or member.voice.self_deaf):
                     afk_channel = member.guild.get_channel(CANALE_AFK_ID)
                     if afk_channel and member.voice.channel.id != CANALE_AFK_ID:
                         try:
-                            await member.move_to(afk_channel, reason="Auto-move: utente mutato da oltre 5 minuti")
+                            await member.move_to(afk_channel, reason="Auto-move: utente assordato da oltre 10 minuti")
                             print(f"Utente {member.name} spostato in AFK.")
                         except discord.Forbidden:
                             print(f"ERRORE: Permessi insufficienti per spostare {member.name}.")
-                timer_mute.pop(member.id, None)
+                timer_deaf.pop(member.id, None)
 
             asyncio.create_task(sposta_dopo_timeout())
-            timer_mute[member.id] = True
+            timer_deaf[member.id] = True
     else:
-        if member.id in timer_mute:
-            print(f"Timer muto annullato per {member.name} (smutato)")
-            timer_mute.pop(member.id, None)
+        if member.id in timer_deaf:
+            print(f"Timer assordato annullato per {member.name} (non più assordato)")
+            timer_deaf.pop(member.id, None)
 
-    # --- PARTE 2: Logica per l'AFK (disconnetti dopo 10 minuti) ---
+    # --- PARTE 2: Logica per l'AFK (disconnetti dopo 15 minuti) ---
     
     # Caso A: L'utente è APPENA ENTRATO nel canale AFK
     if after.channel and after.channel.id == CANALE_AFK_ID and before.channel != after.channel:
         if member.id not in afk_timer:
-            print(f"Timer AFK avviato per {member.name} (10 minuti)")
+            print(f"Timer AFK avviato per {member.name} (15 minuti)")
             
             async def disconnetti_dopo_timeout():
-                await asyncio.sleep(600) # 10 minuti
+                await asyncio.sleep(900) # 15 minuti
                 # Ricontrolla se è ancora nel canale AFK
                 if member.voice and member.voice.channel and member.voice.channel.id == CANALE_AFK_ID:
                     try:
-                        await member.move_to(None, reason="Auto-disconnect: in AFK da oltre 10 minuti")
+                        await member.move_to(None, reason="Auto-disconnect: in AFK da oltre 15 minuti")
                         print(f"Utente {member.name} disconnesso dall'AFK.")
                     except discord.Forbidden:
                         print(f"ERRORE: Permessi insufficienti per disconnettere {member.name}.")
