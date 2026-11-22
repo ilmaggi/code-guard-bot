@@ -69,6 +69,9 @@ async def on_ready():
 # --- LOGICA DI GESTIONE VOCALE (ASSORDATO + AFK) ---
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # La gestione AFK riguarda gli utenti, non gli altri bot (per esempio Jockie Music).
+    if member.bot:
+        return
     
     # --- PARTE 1: Logica per l'ASSORDATO (sposta in AFK dopo 10 minuti) ---
     if after.deaf or after.self_deaf:
